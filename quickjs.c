@@ -210,6 +210,12 @@ typedef enum JSErrorEnum {
 #define JS_STRING_LEN_MAX ((1 << 30) - 1)
 
 #if defined(__GNUC__) || defined(__clang__)
+#define JS_INF (1.0 / 0.0)
+#else
+#define JS_INF HUGE_VAL
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
 #define __exception __attribute__((warn_unused_result))
 #else
 #define __exception
@@ -10246,7 +10252,7 @@ static JSValue js_atof(JSContext *ctx, const char *str, const char **pp,
             } else
 #endif
             {
-                double d = 1.0 / 0.0;
+                double d = JS_INF;
                 if (is_neg)
                     d = -d;
                 val = JS_NewFloat64(ctx, d);
@@ -41768,7 +41774,7 @@ static JSValue js_math_min_max(JSContext *ctx, JSValueConst this_val,
     uint32_t tag;
 
     if (unlikely(argc == 0)) {
-        return __JS_NewFloat64(ctx, is_max ? -1.0 / 0.0 : 1.0 / 0.0);
+        return __JS_NewFloat64(ctx, is_max ? -JS_INF : JS_INF);
     }
 
     tag = JS_VALUE_GET_TAG(argv[0]);
