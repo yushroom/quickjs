@@ -231,6 +231,7 @@ inline JSValue JS_MKPTR(int64_t tag, void* p)
     JSValue value;
     value.u.ptr = p;
     value.tag = tag;
+    return value;
 }
 #endif
 
