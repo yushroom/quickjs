@@ -642,6 +642,8 @@ int main(int argc, char **argv)
         JS_AddIntrinsicOperators(ctx);
         JS_EnableBignumExt(ctx, TRUE);
     }
+#else
+    JS_AddIntrinsicOperators(ctx);
 #endif
     
     /* loader for ES6 modules */

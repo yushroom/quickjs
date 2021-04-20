@@ -161,8 +161,8 @@ enum {
     JS_CLASS_BIG_FLOAT,         /* u.object_data */
     JS_CLASS_FLOAT_ENV,         /* u.float_env */
     JS_CLASS_BIG_DECIMAL,       /* u.object_data */
-    JS_CLASS_OPERATOR_SET,      /* u.operator_set */
 #endif
+    JS_CLASS_OPERATOR_SET,      /* u.operator_set */
     JS_CLASS_MAP,               /* u.map_state */
     JS_CLASS_SET,               /* u.map_state */
     JS_CLASS_WEAKMAP,           /* u.map_state */
@@ -318,8 +318,8 @@ struct JSRuntime {
     JSNumericOperations bigint_ops;
     JSNumericOperations bigfloat_ops;
     JSNumericOperations bigdecimal_ops;
-    uint32_t operator_count;
 #endif
+    uint32_t operator_count;
     void *user_opaque;
 };
 
@@ -456,8 +456,8 @@ struct JSContext {
     bf_context_t *bf_ctx;   /* points to rt->bf_ctx, shared by all contexts */
     JSFloatEnv fp_env; /* global FP environment */
     BOOL bignum_ext : 8; /* enable math mode */
-    BOOL allow_operator_overloading : 8;
 #endif
+    BOOL allow_operator_overloading : 8;
     /* when the counter reaches zero, JSRutime.interrupt_handler is called */
     int interrupt_counter;
     BOOL is_error_property_enabled;
@@ -911,8 +911,8 @@ struct JSObject {
         struct JSTypedArray *typed_array; /* JS_CLASS_UINT8C_ARRAY..JS_CLASS_DATAVIEW */
 #ifdef CONFIG_BIGNUM
         struct JSFloatEnv *float_env; /* JS_CLASS_FLOAT_ENV */
-        struct JSOperatorSetData *operator_set; /* JS_CLASS_OPERATOR_SET */
 #endif
+        struct JSOperatorSetData *operator_set; /* JS_CLASS_OPERATOR_SET */
         struct JSMapState *map_state;   /* JS_CLASS_MAP..JS_CLASS_WEAKSET */
         struct JSMapIteratorData *map_iterator_data; /* JS_CLASS_MAP_ITERATOR, JS_CLASS_SET_ITERATOR */
         struct JSArrayIteratorData *array_iterator_data; /* JS_CLASS_ARRAY_ITERATOR, JS_CLASS_STRING_ITERATOR */
@@ -1099,11 +1099,9 @@ static void js_promise_mark(JSRuntime *rt, JSValueConst val,
 static void js_promise_resolve_function_finalizer(JSRuntime *rt, JSValue val);
 static void js_promise_resolve_function_mark(JSRuntime *rt, JSValueConst val,
                                 JS_MarkFunc *mark_func);
-#ifdef CONFIG_BIGNUM
 static void js_operator_set_finalizer(JSRuntime *rt, JSValue val);
 static void js_operator_set_mark(JSRuntime *rt, JSValueConst val,
                                  JS_MarkFunc *mark_func);
-#endif
 static JSValue JS_ToStringFree(JSContext *ctx, JSValue val);
 static int JS_ToBoolFree(JSContext *ctx, JSValue val);
 static int JS_ToInt32Free(JSContext *ctx, int32_t *pres, JSValue val);
@@ -1496,8 +1494,8 @@ static JSClassShortDef const js_std_class_def[] = {
     { JS_ATOM_BigFloat, js_object_data_finalizer, js_object_data_mark },    /* JS_CLASS_BIG_FLOAT */
     { JS_ATOM_BigFloatEnv, js_float_env_finalizer, NULL },      /* JS_CLASS_FLOAT_ENV */
     { JS_ATOM_BigDecimal, js_object_data_finalizer, js_object_data_mark },    /* JS_CLASS_BIG_DECIMAL */
-    { JS_ATOM_OperatorSet, js_operator_set_finalizer, js_operator_set_mark },    /* JS_CLASS_OPERATOR_SET */
 #endif
+    { JS_ATOM_OperatorSet, js_operator_set_finalizer, js_operator_set_mark },    /* JS_CLASS_OPERATOR_SET */
     { JS_ATOM_Map, js_map_finalizer, js_map_mark },             /* JS_CLASS_MAP */
     { JS_ATOM_Set, js_map_finalizer, js_map_mark },             /* JS_CLASS_SET */
     { JS_ATOM_WeakMap, js_map_finalizer, js_map_mark },         /* JS_CLASS_WEAKMAP */
@@ -12377,6 +12375,8 @@ static JSValue JS_CompactBigInt(JSContext *ctx, JSValue val)
     return JS_CompactBigInt1(ctx, val, is_math_mode(ctx));
 }
 
+#endif
+
 /* must be kept in sync with JSOverloadableOperatorEnum */
 /* XXX: use atoms ? */
 static const char js_overloadable_operator_names[JS_OVOP_COUNT][4] = {
@@ -12413,7 +12413,9 @@ static int get_ovop_from_opcode(OPCodeEnum op)
     case OP_div:
         return JS_OVOP_DIV;
     case OP_mod:
+#ifdef CONFIG_BIGNUM
     case OP_math_mod:
+#endif
         return JS_OVOP_MOD;
     case OP_pow:
         return JS_OVOP_POW;
@@ -12699,6 +12701,8 @@ static __exception int js_call_unary_op_fallback(JSContext *ctx,
     *pret = JS_UNDEFINED;
     return -1;
 }
+
+#ifdef CONFIG_BIGNUM
 
 static JSValue throw_bf_exception(JSContext *ctx, int status)
 {
@@ -14196,7 +14200,7 @@ static no_inline int js_mul_pow10(JSContext *ctx, JSValue *sp)
     return 0;
 }
 
-#else /* !CONFIG_BIGNUM */
+#elif 0 /* !CONFIG_BIGNUM */
 
 static JSValue JS_ThrowUnsupportedBigint(JSContext *ctx)
 {
@@ -14574,6 +14578,764 @@ static no_inline int js_shr_slow(JSContext *ctx, JSValue *sp)
     }
     if (unlikely(JS_ToUint32Free(ctx, &v2, op2)))
         goto exception;
+    r = v1 >> (v2 & 0x1f);
+    sp[-2] = JS_NewUint32(ctx, r);
+    return 0;
+ exception:
+    sp[-2] = JS_UNDEFINED;
+    sp[-1] = JS_UNDEFINED;
+    return -1;
+}
+
+#else
+
+static JSValue JS_ThrowUnsupportedBigint(JSContext *ctx)
+{
+    return JS_ThrowTypeError(ctx, "bigint is not supported");
+}
+
+JSValue JS_NewBigInt64(JSContext *ctx, int64_t v)
+{
+    return JS_ThrowUnsupportedBigint(ctx);
+}
+
+JSValue JS_NewBigUint64(JSContext *ctx, uint64_t v)
+{
+    return JS_ThrowUnsupportedBigint(ctx);
+}
+
+int JS_ToBigInt64(JSContext *ctx, int64_t *pres, JSValueConst val)
+{
+    JS_ThrowUnsupportedBigint(ctx);
+    *pres = 0;
+    return -1;
+}
+
+static no_inline __exception int js_unary_arith_slow(JSContext *ctx,
+                                                     JSValue *sp,
+                                                     OPCodeEnum op)
+{
+    JSValue op1, val;
+    int v, ret;
+    uint32_t tag;
+
+    op1 = sp[-1];
+    /* fast path for float64 */
+    if (JS_TAG_IS_FLOAT64(JS_VALUE_GET_TAG(op1)))
+        goto handle_float64;
+    if (JS_IsObject(op1)) {
+        ret = js_call_unary_op_fallback(ctx, &val, op1, op);
+        if (ret < 0)
+            return -1;
+        if (ret) {
+            JS_FreeValue(ctx, op1);
+            sp[-1] = val;
+            return 0;
+        }
+    }
+
+    op1 = JS_ToNumericFree(ctx, op1);
+    if (JS_IsException(op1))
+        goto exception;
+    tag = JS_VALUE_GET_TAG(op1);
+    switch(tag) {
+    case JS_TAG_INT:
+        {
+            int64_t v64;
+            v64 = JS_VALUE_GET_INT(op1);
+            switch(op) {
+            case OP_inc:
+            case OP_dec:
+                v = 2 * (op - OP_dec) - 1;
+                v64 += v;
+                break;
+            case OP_plus:
+                break;
+            case OP_neg:
+                if (v64 == 0) {
+                    sp[-1] = __JS_NewFloat64(ctx, -0.0);
+                    return 0;
+                } else {
+                    v64 = -v64;
+                }
+                break;
+            default:
+                abort();
+            }
+            sp[-1] = JS_NewInt64(ctx, v64);
+        }
+        break;
+    default:
+    handle_float64:
+        {
+            double d;
+            d = JS_VALUE_GET_FLOAT64(op1);
+            switch(op) {
+            case OP_inc:
+            case OP_dec:
+                v = 2 * (op - OP_dec) - 1;
+                d += v;
+                break;
+            case OP_plus:
+                break;
+            case OP_neg:
+                d = -d;
+                break;
+            default:
+                abort();
+            }
+            sp[-1] = __JS_NewFloat64(ctx, d);
+        }
+        break;
+    }
+    return 0;
+ exception:
+    sp[-1] = JS_UNDEFINED;
+    return -1;
+}
+
+static __exception int js_post_inc_slow(JSContext *ctx,
+                                        JSValue *sp, OPCodeEnum op)
+{
+    JSValue op1;
+
+    /* XXX: allow custom operators */
+    op1 = sp[-1];
+    op1 = JS_ToNumericFree(ctx, op1);
+    if (JS_IsException(op1)) {
+        sp[-1] = JS_UNDEFINED;
+        return -1;
+    }
+    sp[-1] = op1;
+    sp[0] = JS_DupValue(ctx, op1);
+    return js_unary_arith_slow(ctx, sp + 1, op - OP_post_dec + OP_dec);
+}
+
+static no_inline int js_not_slow(JSContext *ctx, JSValue *sp)
+{
+    JSValue op1, val;
+    int ret;
+    
+    op1 = sp[-1];
+    if (JS_IsObject(op1)) {
+        ret = js_call_unary_op_fallback(ctx, &val, op1, OP_not);
+        if (ret < 0)
+            return -1;
+        if (ret) {
+            JS_FreeValue(ctx, op1);
+            sp[-1] = val;
+            return 0;
+        }
+    }
+
+    op1 = JS_ToNumericFree(ctx, op1);
+    if (JS_IsException(op1))
+        goto exception;
+    if (0) {
+    } else {
+        int32_t v1;
+        if (unlikely(JS_ToInt32Free(ctx, &v1, op1)))
+            goto exception;
+        sp[-1] = JS_NewInt32(ctx, ~v1);
+    }
+    return 0;
+ exception:
+    sp[-1] = JS_UNDEFINED;
+    return -1;
+}
+
+static no_inline __exception int js_binary_arith_slow(JSContext *ctx, JSValue *sp,
+                                                      OPCodeEnum op)
+{
+    JSValue op1, op2, res;
+    uint32_t tag1, tag2;
+    int ret;
+    double d1, d2;
+
+    op1 = sp[-2];
+    op2 = sp[-1];
+    tag1 = JS_VALUE_GET_NORM_TAG(op1);
+    tag2 = JS_VALUE_GET_NORM_TAG(op2);
+    /* fast path for float operations */
+    if (tag1 == JS_TAG_FLOAT64 && tag2 == JS_TAG_FLOAT64) {
+        d1 = JS_VALUE_GET_FLOAT64(op1);
+        d2 = JS_VALUE_GET_FLOAT64(op2);
+        goto handle_float64;
+    }
+
+    /* try to call an overloaded operator */
+    if ((tag1 == JS_TAG_OBJECT &&
+         (tag2 != JS_TAG_NULL && tag2 != JS_TAG_UNDEFINED)) ||
+        (tag2 == JS_TAG_OBJECT &&
+         (tag1 != JS_TAG_NULL && tag1 != JS_TAG_UNDEFINED))) {
+        ret = js_call_binary_op_fallback(ctx, &res, op1, op2, op, TRUE, 0);
+        if (ret != 0) {
+            JS_FreeValue(ctx, op1);
+            JS_FreeValue(ctx, op2);
+            if (ret < 0) {
+                goto exception;
+            } else {
+                sp[-2] = res;
+                return 0;
+            }
+        }
+    }
+
+    op1 = JS_ToNumericFree(ctx, op1);
+    if (JS_IsException(op1)) {
+        JS_FreeValue(ctx, op2);
+        goto exception;
+    }
+    op2 = JS_ToNumericFree(ctx, op2);
+    if (JS_IsException(op2)) {
+        JS_FreeValue(ctx, op1);
+        goto exception;
+    }
+    tag1 = JS_VALUE_GET_NORM_TAG(op1);
+    tag2 = JS_VALUE_GET_NORM_TAG(op2);
+
+    if (tag1 == JS_TAG_INT && tag2 == JS_TAG_INT) {
+        int32_t v1, v2;
+        int64_t v;
+        v1 = JS_VALUE_GET_INT(op1);
+        v2 = JS_VALUE_GET_INT(op2);
+        switch(op) {
+        case OP_sub:
+            v = (int64_t)v1 - (int64_t)v2;
+            break;
+        case OP_mul:
+            v = (int64_t)v1 * (int64_t)v2;
+            if (v == 0 && (v1 | v2) < 0) {
+                sp[-2] = __JS_NewFloat64(ctx, -0.0);
+                return 0;
+            }
+            break;
+        case OP_div:
+            sp[-2] = __JS_NewFloat64(ctx, (double)v1 / (double)v2);
+            return 0;
+        case OP_mod:
+            if (v1 < 0 || v2 <= 0) {
+                sp[-2] = JS_NewFloat64(ctx, fmod(v1, v2));
+                return 0;
+            } else {
+                v = (int64_t)v1 % (int64_t)v2;
+            }
+            break;
+        case OP_pow:
+            if (1) {
+                sp[-2] = JS_NewFloat64(ctx, js_pow(v1, v2));
+                return 0;
+            }
+            break;
+        default:
+            abort();
+        }
+        sp[-2] = JS_NewInt64(ctx, v);
+    } else {
+        double dr;
+        /* float64 result */
+        if (JS_ToFloat64Free(ctx, &d1, op1)) {
+            JS_FreeValue(ctx, op2);
+            goto exception;
+        }
+        if (JS_ToFloat64Free(ctx, &d2, op2))
+            goto exception;
+    handle_float64:
+        switch(op) {
+        case OP_sub:
+            dr = d1 - d2;
+            break;
+        case OP_mul:
+            dr = d1 * d2;
+            break;
+        case OP_div:
+            dr = d1 / d2;
+            break;
+        case OP_mod:
+            dr = fmod(d1, d2);
+            break;
+        case OP_pow:
+            dr = js_pow(d1, d2);
+            break;
+        default:
+            abort();
+        }
+        sp[-2] = __JS_NewFloat64(ctx, dr);
+    }
+    return 0;
+ exception:
+    sp[-2] = JS_UNDEFINED;
+    sp[-1] = JS_UNDEFINED;
+    return -1;
+}
+
+static no_inline __exception int js_add_slow(JSContext *ctx, JSValue *sp)
+{
+    JSValue op1, op2, res;
+    uint32_t tag1, tag2;
+    int ret;
+
+    op1 = sp[-2];
+    op2 = sp[-1];
+
+    tag1 = JS_VALUE_GET_NORM_TAG(op1);
+    tag2 = JS_VALUE_GET_NORM_TAG(op2);
+    /* fast path for float64 */
+    if (tag1 == JS_TAG_FLOAT64 && tag2 == JS_TAG_FLOAT64) {
+        double d1, d2;
+        d1 = JS_VALUE_GET_FLOAT64(op1);
+        d2 = JS_VALUE_GET_FLOAT64(op2);
+        sp[-2] = __JS_NewFloat64(ctx, d1 + d2);
+        return 0;
+    }
+
+    if (tag1 == JS_TAG_OBJECT || tag2 == JS_TAG_OBJECT) {
+        /* try to call an overloaded operator */
+        if ((tag1 == JS_TAG_OBJECT &&
+             (tag2 != JS_TAG_NULL && tag2 != JS_TAG_UNDEFINED &&
+              tag2 != JS_TAG_STRING)) ||
+            (tag2 == JS_TAG_OBJECT &&
+             (tag1 != JS_TAG_NULL && tag1 != JS_TAG_UNDEFINED &&
+              tag1 != JS_TAG_STRING))) {
+            ret = js_call_binary_op_fallback(ctx, &res, op1, op2, OP_add,
+                                             FALSE, HINT_NONE);
+            if (ret != 0) {
+                JS_FreeValue(ctx, op1);
+                JS_FreeValue(ctx, op2);
+                if (ret < 0) {
+                    goto exception;
+                } else {
+                    sp[-2] = res;
+                    return 0;
+                }
+            }
+        }
+
+        op1 = JS_ToPrimitiveFree(ctx, op1, HINT_NONE);
+        if (JS_IsException(op1)) {
+            JS_FreeValue(ctx, op2);
+            goto exception;
+        }
+
+        op2 = JS_ToPrimitiveFree(ctx, op2, HINT_NONE);
+        if (JS_IsException(op2)) {
+            JS_FreeValue(ctx, op1);
+            goto exception;
+        }
+        tag1 = JS_VALUE_GET_NORM_TAG(op1);
+        tag2 = JS_VALUE_GET_NORM_TAG(op2);
+    }
+
+    if (tag1 == JS_TAG_STRING || tag2 == JS_TAG_STRING) {
+        sp[-2] = JS_ConcatString(ctx, op1, op2);
+        if (JS_IsException(sp[-2]))
+            goto exception;
+        return 0;
+    }
+
+    op1 = JS_ToNumericFree(ctx, op1);
+    if (JS_IsException(op1)) {
+        JS_FreeValue(ctx, op2);
+        goto exception;
+    }
+    op2 = JS_ToNumericFree(ctx, op2);
+    if (JS_IsException(op2)) {
+        JS_FreeValue(ctx, op1);
+        goto exception;
+    }
+    tag1 = JS_VALUE_GET_NORM_TAG(op1);
+    tag2 = JS_VALUE_GET_NORM_TAG(op2);
+
+    if (tag1 == JS_TAG_INT && tag2 == JS_TAG_INT) {
+        int32_t v1, v2;
+        int64_t v;
+        v1 = JS_VALUE_GET_INT(op1);
+        v2 = JS_VALUE_GET_INT(op2);
+        v = (int64_t)v1 + (int64_t)v2;
+        sp[-2] = JS_NewInt64(ctx, v);
+    } else {
+        double d1, d2;
+        /* float64 result */
+        if (JS_ToFloat64Free(ctx, &d1, op1)) {
+            JS_FreeValue(ctx, op2);
+            goto exception;
+        }
+        if (JS_ToFloat64Free(ctx, &d2, op2))
+            goto exception;
+        sp[-2] = __JS_NewFloat64(ctx, d1 + d2);
+    }
+    return 0;
+ exception:
+    sp[-2] = JS_UNDEFINED;
+    sp[-1] = JS_UNDEFINED;
+    return -1;
+}
+
+static no_inline __exception int js_binary_logic_slow(JSContext *ctx,
+                                                      JSValue *sp,
+                                                      OPCodeEnum op)
+{
+    JSValue op1, op2, res;
+    int ret;
+    uint32_t tag1, tag2;
+    uint32_t v1, v2, r;
+
+    op1 = sp[-2];
+    op2 = sp[-1];
+    tag1 = JS_VALUE_GET_NORM_TAG(op1);
+    tag2 = JS_VALUE_GET_NORM_TAG(op2);
+
+    /* try to call an overloaded operator */
+    if ((tag1 == JS_TAG_OBJECT &&
+         (tag2 != JS_TAG_NULL && tag2 != JS_TAG_UNDEFINED)) ||
+        (tag2 == JS_TAG_OBJECT &&
+         (tag1 != JS_TAG_NULL && tag1 != JS_TAG_UNDEFINED))) {
+        ret = js_call_binary_op_fallback(ctx, &res, op1, op2, op, TRUE, 0);
+        if (ret != 0) {
+            JS_FreeValue(ctx, op1);
+            JS_FreeValue(ctx, op2);
+            if (ret < 0) {
+                goto exception;
+            } else {
+                sp[-2] = res;
+                return 0;
+            }
+        }
+    }
+
+    op1 = JS_ToNumericFree(ctx, op1);
+    if (JS_IsException(op1)) {
+        JS_FreeValue(ctx, op2);
+        goto exception;
+    }
+    op2 = JS_ToNumericFree(ctx, op2);
+    if (JS_IsException(op2)) {
+        JS_FreeValue(ctx, op1);
+        goto exception;
+    }
+
+    tag1 = JS_VALUE_GET_TAG(op1);
+    tag2 = JS_VALUE_GET_TAG(op2);
+    if (0) {
+    } else {
+        if (unlikely(JS_ToInt32Free(ctx, (int32_t *)&v1, op1))) {
+            JS_FreeValue(ctx, op2);
+            goto exception;
+        }
+        if (unlikely(JS_ToInt32Free(ctx, (int32_t *)&v2, op2)))
+            goto exception;
+        switch(op) {
+        case OP_shl:
+            r = v1 << (v2 & 0x1f);
+            break;
+        case OP_sar:
+            r = (int)v1 >> (v2 & 0x1f);
+            break;
+        case OP_and:
+            r = v1 & v2;
+            break;
+        case OP_or:
+            r = v1 | v2;
+            break;
+        case OP_xor:
+            r = v1 ^ v2;
+            break;
+        default:
+            abort();
+        }
+        sp[-2] = JS_NewInt32(ctx, r);
+    }
+    return 0;
+ exception:
+    sp[-2] = JS_UNDEFINED;
+    sp[-1] = JS_UNDEFINED;
+    return -1;
+}
+
+static no_inline int js_relational_slow(JSContext *ctx, JSValue *sp,
+                                        OPCodeEnum op)
+{
+    JSValue op1, op2, ret;
+    int res;
+    uint32_t tag1, tag2;
+
+    op1 = sp[-2];
+    op2 = sp[-1];
+    tag1 = JS_VALUE_GET_NORM_TAG(op1);
+    tag2 = JS_VALUE_GET_NORM_TAG(op2);
+    /* try to call an overloaded operator */
+    if ((tag1 == JS_TAG_OBJECT &&
+         (tag2 != JS_TAG_NULL && tag2 != JS_TAG_UNDEFINED)) ||
+        (tag2 == JS_TAG_OBJECT &&
+         (tag1 != JS_TAG_NULL && tag1 != JS_TAG_UNDEFINED))) {
+        res = js_call_binary_op_fallback(ctx, &ret, op1, op2, op,
+                                         FALSE, HINT_NUMBER);
+        if (res != 0) {
+            JS_FreeValue(ctx, op1);
+            JS_FreeValue(ctx, op2);
+            if (res < 0) {
+                goto exception;
+            } else {
+                sp[-2] = ret;
+                return 0;
+            }
+        }
+    }
+    op1 = JS_ToPrimitiveFree(ctx, op1, HINT_NUMBER);
+    if (JS_IsException(op1)) {
+        JS_FreeValue(ctx, op2);
+        goto exception;
+    }
+    op2 = JS_ToPrimitiveFree(ctx, op2, HINT_NUMBER);
+    if (JS_IsException(op2)) {
+        JS_FreeValue(ctx, op1);
+        goto exception;
+    }
+    tag1 = JS_VALUE_GET_NORM_TAG(op1);
+    tag2 = JS_VALUE_GET_NORM_TAG(op2);
+
+    if (tag1 == JS_TAG_STRING && tag2 == JS_TAG_STRING) {
+        JSString *p1, *p2;
+        p1 = JS_VALUE_GET_STRING(op1);
+        p2 = JS_VALUE_GET_STRING(op2);
+        res = js_string_compare(ctx, p1, p2);
+        switch(op) {
+        case OP_lt:
+            res = (res < 0);
+            break;
+        case OP_lte:
+            res = (res <= 0);
+            break;
+        case OP_gt:
+            res = (res > 0);
+            break;
+        default:
+        case OP_gte:
+            res = (res >= 0);
+            break;
+        }
+        JS_FreeValue(ctx, op1);
+        JS_FreeValue(ctx, op2);
+    } else if ((tag1 <= JS_TAG_NULL || tag1 == JS_TAG_FLOAT64) &&
+               (tag2 <= JS_TAG_NULL || tag2 == JS_TAG_FLOAT64)) {
+        /* fast path for float64/int */
+        goto float64_compare;
+    } else {
+        if (0) {
+        } else {
+            op1 = JS_ToNumericFree(ctx, op1);
+            if (JS_IsException(op1)) {
+                JS_FreeValue(ctx, op2);
+                goto exception;
+            }
+            op2 = JS_ToNumericFree(ctx, op2);
+            if (JS_IsException(op2)) {
+                JS_FreeValue(ctx, op1);
+                goto exception;
+            }
+        }
+
+        tag1 = JS_VALUE_GET_NORM_TAG(op1);
+        tag2 = JS_VALUE_GET_NORM_TAG(op2);
+
+        if (0) {
+        } else {
+            double d1, d2;
+
+        float64_compare:
+            /* can use floating point comparison */
+            if (tag1 == JS_TAG_FLOAT64) {
+                d1 = JS_VALUE_GET_FLOAT64(op1);
+            } else {
+                d1 = JS_VALUE_GET_INT(op1);
+            }
+            if (tag2 == JS_TAG_FLOAT64) {
+                d2 = JS_VALUE_GET_FLOAT64(op2);
+            } else {
+                d2 = JS_VALUE_GET_INT(op2);
+            }
+            switch(op) {
+            case OP_lt:
+                res = (d1 < d2); /* if NaN return false */
+                break;
+            case OP_lte:
+                res = (d1 <= d2); /* if NaN return false */
+                break;
+            case OP_gt:
+                res = (d1 > d2); /* if NaN return false */
+                break;
+            default:
+            case OP_gte:
+                res = (d1 >= d2); /* if NaN return false */
+                break;
+            }
+        }
+    }
+ done:
+    sp[-2] = JS_NewBool(ctx, res);
+    return 0;
+ exception:
+    sp[-2] = JS_UNDEFINED;
+    sp[-1] = JS_UNDEFINED;
+    return -1;
+}
+
+static BOOL tag_is_number(uint32_t tag)
+{
+    return (tag == JS_TAG_INT || tag == JS_TAG_BIG_INT ||
+            tag == JS_TAG_FLOAT64 || tag == JS_TAG_BIG_FLOAT ||
+            tag == JS_TAG_BIG_DECIMAL);
+}
+
+static no_inline __exception int js_eq_slow(JSContext *ctx, JSValue *sp,
+                                            BOOL is_neq)
+{
+    JSValue op1, op2, ret;
+    int res;
+    uint32_t tag1, tag2;
+
+    op1 = sp[-2];
+    op2 = sp[-1];
+ redo:
+    tag1 = JS_VALUE_GET_NORM_TAG(op1);
+    tag2 = JS_VALUE_GET_NORM_TAG(op2);
+    if (tag_is_number(tag1) && tag_is_number(tag2)) {
+        if (tag1 == JS_TAG_INT && tag2 == JS_TAG_INT) {
+            res = JS_VALUE_GET_INT(op1) == JS_VALUE_GET_INT(op2);
+        } else if ((tag1 == JS_TAG_FLOAT64 &&
+                    (tag2 == JS_TAG_INT || tag2 == JS_TAG_FLOAT64)) ||
+                   (tag2 == JS_TAG_FLOAT64 &&
+                    (tag1 == JS_TAG_INT || tag1 == JS_TAG_FLOAT64))) {
+            double d1, d2;
+            if (tag1 == JS_TAG_FLOAT64) {
+                d1 = JS_VALUE_GET_FLOAT64(op1);
+            } else {
+                d1 = JS_VALUE_GET_INT(op1);
+            }
+            if (tag2 == JS_TAG_FLOAT64) {
+                d2 = JS_VALUE_GET_FLOAT64(op2);
+            } else {
+                d2 = JS_VALUE_GET_INT(op2);
+            }
+            res = (d1 == d2);
+        }
+    } else if (tag1 == tag2) {
+        if (tag1 == JS_TAG_OBJECT) {
+            /* try the fallback operator */
+            res = js_call_binary_op_fallback(ctx, &ret, op1, op2,
+                                             is_neq ? OP_neq : OP_eq,
+                                             FALSE, HINT_NONE);
+            if (res != 0) {
+                JS_FreeValue(ctx, op1);
+                JS_FreeValue(ctx, op2);
+                if (res < 0) {
+                    goto exception;
+                } else {
+                    sp[-2] = ret;
+                    return 0;
+                }
+            }
+        }
+        res = js_strict_eq2(ctx, op1, op2, JS_EQ_STRICT);
+    } else if ((tag1 == JS_TAG_NULL && tag2 == JS_TAG_UNDEFINED) ||
+               (tag2 == JS_TAG_NULL && tag1 == JS_TAG_UNDEFINED)) {
+        res = TRUE;
+    } else if ((tag1 == JS_TAG_STRING && tag_is_number(tag2)) ||
+               (tag2 == JS_TAG_STRING && tag_is_number(tag1))) {
+
+        if (0) {
+        } else {
+            op1 = JS_ToNumericFree(ctx, op1);
+            if (JS_IsException(op1)) {
+                JS_FreeValue(ctx, op2);
+                goto exception;
+            }
+            op2 = JS_ToNumericFree(ctx, op2);
+            if (JS_IsException(op2)) {
+                JS_FreeValue(ctx, op1);
+                goto exception;
+            }
+        }
+        res = js_strict_eq(ctx, op1, op2);
+    } else if (tag1 == JS_TAG_BOOL) {
+        op1 = JS_NewInt32(ctx, JS_VALUE_GET_INT(op1));
+        goto redo;
+    } else if (tag2 == JS_TAG_BOOL) {
+        op2 = JS_NewInt32(ctx, JS_VALUE_GET_INT(op2));
+        goto redo;
+    } else if ((tag1 == JS_TAG_OBJECT &&
+                (tag_is_number(tag2) || tag2 == JS_TAG_STRING || tag2 == JS_TAG_SYMBOL)) ||
+               (tag2 == JS_TAG_OBJECT &&
+                (tag_is_number(tag1) || tag1 == JS_TAG_STRING || tag1 == JS_TAG_SYMBOL))) {
+
+        /* try the fallback operator */
+        res = js_call_binary_op_fallback(ctx, &ret, op1, op2,
+                                         is_neq ? OP_neq : OP_eq,
+                                         FALSE, HINT_NONE);
+        if (res != 0) {
+            JS_FreeValue(ctx, op1);
+            JS_FreeValue(ctx, op2);
+            if (res < 0) {
+                goto exception;
+            } else {
+                sp[-2] = ret;
+                return 0;
+            }
+        }
+
+        op1 = JS_ToPrimitiveFree(ctx, op1, HINT_NONE);
+        if (JS_IsException(op1)) {
+            JS_FreeValue(ctx, op2);
+            goto exception;
+        }
+        op2 = JS_ToPrimitiveFree(ctx, op2, HINT_NONE);
+        if (JS_IsException(op2)) {
+            JS_FreeValue(ctx, op1);
+            goto exception;
+        }
+        goto redo;
+    } else {
+        /* IsHTMLDDA object is equivalent to undefined for '==' and '!=' */
+        if ((JS_IsHTMLDDA(ctx, op1) &&
+             (tag2 == JS_TAG_NULL || tag2 == JS_TAG_UNDEFINED)) ||
+            (JS_IsHTMLDDA(ctx, op2) &&
+             (tag1 == JS_TAG_NULL || tag1 == JS_TAG_UNDEFINED))) {
+            res = TRUE;
+        } else {
+            res = FALSE;
+        }
+        JS_FreeValue(ctx, op1);
+        JS_FreeValue(ctx, op2);
+    }
+ done:
+    sp[-2] = JS_NewBool(ctx, res ^ is_neq);
+    return 0;
+ exception:
+    sp[-2] = JS_UNDEFINED;
+    sp[-1] = JS_UNDEFINED;
+    return -1;
+}
+
+static no_inline int js_shr_slow(JSContext *ctx, JSValue *sp)
+{
+    JSValue op1, op2;
+    uint32_t v1, v2, r;
+
+    op1 = sp[-2];
+    op2 = sp[-1];
+    op1 = JS_ToNumericFree(ctx, op1);
+    if (JS_IsException(op1)) {
+        JS_FreeValue(ctx, op2);
+        goto exception;
+    }
+    op2 = JS_ToNumericFree(ctx, op2);
+    if (JS_IsException(op2)) {
+        JS_FreeValue(ctx, op1);
+        goto exception;
+    }
+    /* cannot give an exception */
+    JS_ToUint32Free(ctx, &v1, op1);
+    JS_ToUint32Free(ctx, &v2, op2);
     r = v1 >> (v2 & 0x1f);
     sp[-2] = JS_NewUint32(ctx, r);
     return 0;
@@ -48834,8 +49596,6 @@ void JS_AddIntrinsicEval(JSContext *ctx)
     ctx->eval_internal = __JS_EvalInternal;
 }
 
-#ifdef CONFIG_BIGNUM
-
 /* Operators */
 
 static void js_operator_set_finalizer(JSRuntime *rt, JSValue val)
@@ -49015,6 +49775,8 @@ static JSValue js_operators_create(JSContext *ctx, JSValueConst this_val,
     return js_operators_create_internal(ctx, argc, argv, FALSE);
 }
 
+#ifdef CONFIG_BIGNUM
+
 static JSValue js_operators_updateBigIntOperators(JSContext *ctx, JSValueConst this_val,
                                                   int argc, JSValueConst *argv)
 {
@@ -49057,6 +49819,8 @@ static JSValue js_operators_updateBigIntOperators(JSContext *ctx, JSValueConst t
     JS_FreeValue(ctx, opset_obj);
     return JS_EXCEPTION;
 }
+
+#endif
 
 static int js_operators_set_default(JSContext *ctx, JSValueConst obj)
 {
@@ -49109,7 +49873,9 @@ static JSValue js_global_operators(JSContext *ctx, JSValueConst this_val,
 
 static const JSCFunctionListEntry js_operators_funcs[] = {
     JS_CFUNC_DEF("create", 1, js_operators_create ),
+#ifdef CONFIG_BIGNUM
     JS_CFUNC_DEF("updateBigIntOperators", 2, js_operators_updateBigIntOperators ),
+#endif
 };
 
 /* must be called after all overloadable base types are initialized */
@@ -49129,10 +49895,14 @@ void JS_AddIntrinsicOperators(JSContext *ctx)
     js_operators_set_default(ctx, ctx->class_proto[JS_CLASS_BOOLEAN]);
     js_operators_set_default(ctx, ctx->class_proto[JS_CLASS_NUMBER]);
     js_operators_set_default(ctx, ctx->class_proto[JS_CLASS_STRING]);
+#ifdef CONFIG_BIGNUM
     js_operators_set_default(ctx, ctx->class_proto[JS_CLASS_BIG_INT]);
     js_operators_set_default(ctx, ctx->class_proto[JS_CLASS_BIG_FLOAT]);
     js_operators_set_default(ctx, ctx->class_proto[JS_CLASS_BIG_DECIMAL]);
+#endif
 }
+
+#ifdef CONFIG_BIGNUM
 
 /* BigInt */
 

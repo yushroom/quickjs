@@ -118,6 +118,8 @@ static JSContext *JS_NewCustomContext(JSRuntime *rt)
         JS_AddIntrinsicOperators(ctx);
         JS_EnableBignumExt(ctx, TRUE);
     }
+#else
+    JS_AddIntrinsicOperators(ctx);
 #endif
     /* system modules */
     js_init_module_std(ctx, "std");
