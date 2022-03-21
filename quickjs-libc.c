@@ -2495,6 +2495,49 @@ static JSValue js_os_readdir(JSContext *ctx, JSValueConst this_val,
  done:
     return make_obj_error(ctx, obj, err);
 }
+#else
+/* return [array, errorcode] */
+static JSValue js_os_readdir(JSContext *ctx, JSValueConst this_val,
+                             int argc, JSValueConst *argv)
+{
+    const char *path;
+    //DIR *f;
+    //struct dirent *d;
+    HANDLE f;
+    WIN32_FIND_DATA d;
+    JSValue obj;
+    int err;
+    uint32_t len;
+    char buf[MAX_PATH + 10];
+    
+    path = JS_ToCString(ctx, argv[0]);
+    if (!path)
+        return JS_EXCEPTION;
+    obj = JS_NewArray(ctx);
+    if (JS_IsException(obj)) {
+        JS_FreeCString(ctx, path);
+        return JS_EXCEPTION;
+    }
+    sprintf(buf, "%s\\*.*", path);
+    f = FindFirstFile(buf, &d);
+    JS_FreeCString(ctx, path);
+    if (f == INVALID_HANDLE_VALUE) {
+        err = GetLastError();
+        goto done;
+    }
+    else {
+        err = 0;
+    }
+    len = 0;
+    do {
+        JS_DefinePropertyValueUint32(ctx, obj, len++,
+                                     JS_NewString(ctx, d.cFileName),
+                                     JS_PROP_C_W_E);
+    } while (FindNextFile(f, &d));
+    FindClose(f);
+ done:
+    return make_obj_error(ctx, obj, err);
+}
 #endif
 
 #if !defined(_WIN32)
@@ -3657,9 +3700,7 @@ static const JSCFunctionListEntry js_os_funcs[] = {
     JS_CFUNC_DEF("getcwd", 0, js_os_getcwd ),
     JS_CFUNC_DEF("chdir", 0, js_os_chdir ),
     JS_CFUNC_DEF("mkdir", 1, js_os_mkdir ),
-#if !defined(_WIN32)
     JS_CFUNC_DEF("readdir", 1, js_os_readdir ),
-#endif
     /* st_mode constants */
     OS_FLAG(S_IFMT),
 #if !defined(_WIN32)
