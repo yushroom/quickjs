@@ -38,9 +38,9 @@ extern "C" {
 #define js_force_inline       inline __attribute__((always_inline))
 #define __js_printf_like(f, a)   __attribute__((format(printf, f, a)))
 #else
-#define js_likely(x)     (x)
-#define js_unlikely(x)   (x)
-#define js_force_inline  inline
+#define js_likely(x)          (x)
+#define js_unlikely(x)        (x)
+#define js_force_inline       __forceinline
 #define __js_printf_like(a, b)
 #endif
 
