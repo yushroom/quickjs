@@ -3700,9 +3700,7 @@ static const JSCFunctionListEntry js_os_funcs[] = {
     JS_CFUNC_DEF("getcwd", 0, js_os_getcwd ),
     JS_CFUNC_DEF("chdir", 0, js_os_chdir ),
     JS_CFUNC_DEF("mkdir", 1, js_os_mkdir ),
-#if !defined(_WIN32)
     JS_CFUNC_DEF("readdir", 1, js_os_readdir ),
-#endif
     /* st_mode constants */
     OS_FLAG(S_IFMT),
 #if !defined(_WIN32)
