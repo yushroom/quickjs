@@ -1,0 +1,5 @@
+﻿build
+*.o
+repl.c
+.xmake
+vsxmake2022
