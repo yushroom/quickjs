@@ -3,6 +3,7 @@
 add_rules("mode.debug", "mode.release")
 add_defines("CONFIG_VERSION=\"2021-03-27\"")
 set_group("quickjs")
+-- set_languages("c99")
 
 -- if is_plat("windows") then 
 --     add_defines("CONFIG_WIN32=\"y\"")
@@ -16,17 +17,19 @@ option("CONFIG_BIGNUM")
 target("quickjs")
     set_kind("static")
     add_includedirs(".", {public=true})
-    add_headerfiles("cutils.h")
-    add_headerfiles("libunicode.h")
-    add_headerfiles("list.h")
-    add_headerfiles("quickjs-atom.h")
-    add_headerfiles("quickjs-libc.h")
-    add_headerfiles("quickjs-opcode.h")
-    add_headerfiles("quickjs.h")
-    add_files("cutils.c")
-    add_files("libunicode.c")
-    add_files("quickjs-libc.c")
-    add_files("quickjs.c")
+    add_headerfiles(
+        "cutils.h",
+        "libunicode.h",
+        "list.h",
+        "quickjs-atom.h",
+        "quickjs-libc.h",
+        "quickjs-opcode.h",
+        "quickjs.h")
+    add_files(
+        "cutils.c",
+        "libunicode.c",
+        "quickjs-libc.c",
+        "quickjs.c")
 
     add_headerfiles("libregexp.h")
     add_files("libregexp.c")
@@ -39,6 +42,7 @@ target("quickjs")
     else
         add_headerfiles("libbf.h")
         add_files("libbf.c")
+        add_defines("CONFIG_BIGNUM", {public=true})
     end
 
 target("qjsc")
@@ -49,29 +53,40 @@ target("qjsc")
     add_headerfiles("getopt.h")
     add_files("getopt.c")
 
-target("reql")
-    set_kind("static")
-    add_files("repl.c")
-    add_deps("quickjs")
-    add_deps("qjsc")
-    -- before_build_file(function (target,sourcefile,opt) 
-    --     -- os.run("$(buildir)/qjsc -c -o $(target:targetdir())/repl.c -m $(projectdir)/quickjs/repl.js")
-    --     -- os.run(path.join(target:targetdir(),"./qjsc.exe"),"")
-    --     import("core.project.depend")
-    --     depend.on_changed(function()
-    --         os.vrunv('qjsc.exe', {"-c", "-o", "repl.c", "-m", "repl.js"})
-    --     end, {files = sourcefile})
-    -- end)
+rule("js")
+    set_extensions(".js")
+    on_buildcmd_file(function (target, batchcmds, sourcefile_js, opt)
+        import("core.project.depend")
+		import("utils.progress")
+        local qjsc = target:dep("qjsc"):targetfile()
+        --print(qjsc)
+        assert(os.exists(qjsc), "error: qjsc not found!")
+        local js_c = path.join(target:autogendir(), "rules", "js_c", path.basename(sourcefile_js) .. ".c")
+        local objectfile = target:objectfile(js_c)
+        table.insert(target:objectfiles(), objectfile)
+        --print(js_c, objectfile)
+
+        -- add commands
+        batchcmds:show_progress(opt.progress, "${color.build.object} compiling.js %s", sourcefile_js)
+        batchcmds:mkdir(path.directory(js_c))
+        batchcmds:vrunv(qjsc, {"-c", "-o", js_c, "-m", sourcefile_js})
+        batchcmds:compile(js_c, objectfile)
+
+        -- add deps
+        batchcmds:add_depfiles(sourcefile_js)
+        local dependfile = target:dependfile(objectfile)
+        batchcmds:set_depmtime(os.mtime(dependfile))
+        batchcmds:set_depcache(dependfile)
+    end)
 
 target("qjs")
+    set_policy("build.across_targets_in_parallel", false)
     set_kind("binary")
-    if not is_plat("windows") then
-        add_options("CONFIG_BIGNUM")
-    end
     add_files("qjs.c")
     add_deps("quickjs")
     add_deps("qjsc")
-    add_deps("reql")
+    add_rules("js")
+    add_files("repl.js")
 
 if not is_plat("windows") then
     target("run-test262")
