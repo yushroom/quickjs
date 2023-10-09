@@ -1,7 +1,8 @@
-set_project("quickjs")
+-- set_project("quickjs")
 
 add_rules("mode.debug", "mode.release")
 add_defines("CONFIG_VERSION=\"2021-03-27\"")
+set_group("quickjs")
 
 -- if is_plat("windows") then 
 --     add_defines("CONFIG_WIN32=\"y\"")
@@ -14,6 +15,7 @@ option("CONFIG_BIGNUM")
 
 target("quickjs")
     set_kind("static")
+    add_includedirs(".", {public=true})
     add_headerfiles("cutils.h")
     add_headerfiles("libunicode.h")
     add_headerfiles("list.h")
